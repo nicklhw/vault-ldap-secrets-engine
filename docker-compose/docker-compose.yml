@@ -1,0 +1,71 @@
+version: '3.7'
+
+networks:
+  vault:
+    ipam:
+      driver: default
+      config:
+        - subnet: "10.5.0.0/16"
+
+services:
+  ldap:
+    image: osixia/openldap:1.5.0
+    restart: always
+    container_name: ldap
+    domainname: "hashicorp.com"
+    hostname: "ldap"
+    command: --copy-service
+    environment:
+      LDAP_ORGANISATION: "HashiCorp"
+      LDAP_DOMAIN: "hashicorp.com"
+      LDAP_ADMIN_PASSWORD: "admin"
+    volumes:
+      - ./openldap/bootstrap.ldif:/container/service/slapd/assets/config/bootstrap/ldif/50-bootstrap.ldif
+    ports:
+      - 389:389
+      - 636:636
+    networks:
+      - vault
+  phpldapadmin:
+    image: osixia/phpldapadmin:latest
+    container_name: phpldapadmin
+    environment:
+      PHPLDAPADMIN_LDAP_HOSTS: 'ldap'
+      PHPLDAPADMIN_HTTPS: 'false'
+    ports:
+      - 127.0.0.1:8081:80
+    depends_on:
+      - ldap
+    networks:
+      - vault
+  vault:
+    image: hashicorp/vault-enterprise:latest
+    restart: always
+    volumes:
+      - ./vault:/vault/config:rw
+      - ./vault/audit_logs:/var/log/vault:rw
+      - /vault/data
+    ports:
+      - "8200:8200/tcp"
+    cap_add:
+      - IPC_LOCK
+    container_name: vault
+    entrypoint: "vault server -config=/vault/config"
+    environment:
+      - VAULT_LICENSE=${VAULT_LICENSE}
+    networks:
+      - vault
+  vault-agent:
+    depends_on: [ vault ]
+    image: hashicorp/vault-enterprise:latest
+    restart: always
+    ports:
+      - "8100:8200/tcp"
+    volumes:
+      - ./vault-agent:/vault-agent:rw
+    environment:
+      VAULT_ADDR: "http://vault:8200"
+    container_name: vault-agent
+    entrypoint: "vault agent -config=/vault-agent/vault-agent.hcl"
+    networks:
+      - vault
