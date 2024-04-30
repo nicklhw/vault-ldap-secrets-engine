@@ -36,6 +36,8 @@ services:
       - 127.0.0.1:8081:80
     depends_on:
       - ldap
+    command:
+      - --loglevel=debug
     networks:
       - vault
   vault:
